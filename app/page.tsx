@@ -13,26 +13,38 @@ export default function Home() {
     return (
         <main className="min-h-screen p-8 max-w-7xl mx-auto space-y-12 pb-24">
             <TourMode />
-            <header className="space-y-4 text-center">
+            <header className="space-y-4 text-center py-12">
                 <div className="flex justify-center mb-6">
-                    <div className="p-3 rounded-2xl bg-agreement/10 border border-agreement/20">
+                    <div className="p-3 rounded-2xl bg-agreement/10 border border-agreement/20 animate-pulse">
                         <Shield className="w-12 h-12 text-agreement" />
                     </div>
                 </div>
-                <h1 className="text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                <h1 className="text-7xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-400 to-agreement bg-clip-text text-transparent">
                     EvidenceSynthesis
                 </h1>
                 <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-                    AI-Powered Cross-Document Research Analysis. Detect contradictions, synthesize evidence, and quantify confidence.
+                    AI-Powered Cross-Document Research Analysis. <br />
+                    Detect contradictions, synthesize evidence, and verify conclusions.
                 </p>
 
-                <div className="flex justify-center gap-4 pt-4">
+                <div className="flex flex-col items-center gap-6 pt-8">
                     <QuickDemoButton />
+                    <p className="text-sm text-slate-500 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-agreement" />
+                        Experience the core synthesis engine in 30 seconds
+                    </p>
                 </div>
             </header>
 
-            <section className="flex flex-col items-center gap-12">
-                <PDFUpload />
+            <section className="relative py-12 border-y border-slate-900 overflow-hidden">
+                <div className="absolute inset-0 bg-agreement/5 blur-3xl rounded-full opacity-20 -z-10" />
+                <div className="max-w-4xl mx-auto px-6 space-y-8 text-center">
+                    <div className="space-y-2">
+                        <h2 className="text-2xl font-bold">Custom Research Analysis</h2>
+                        <p className="text-slate-400">Upload your own papers for deep-dive synthesis</p>
+                    </div>
+                    <PDFUpload />
+                </div>
             </section>
 
             <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-12 border-t border-slate-900">
@@ -84,7 +96,7 @@ function QuickDemoButton() {
         try {
             const { seedDemoData } = await import("@/lib/demo-data");
             const id = await seedDemoData();
-            router.push(`/dashboard/${id}`);
+            router.push(`/dashboard?id=${id}`);
         } catch (e) {
             console.error(e);
             setIsSeeding(false);

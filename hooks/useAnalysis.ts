@@ -11,14 +11,14 @@ import {
     updateDoc,
 } from "firebase/firestore";
 import { useAnalysisStore } from "@/store/useAnalysisStore";
-import { PaperMetadata, Analysis, SynthesisResult, AnalysisStatus } from "@/types";
+import { PaperMetadata, Analysis, SynthesisResult, AnalysisStatus, Paper } from "@/types";
 
 /**
  * Hook to upload multiple papers and create an analysis record
  */
 export function useUploadPapers() {
     return useMutation({
-        mutationFn: async (papers: { metadata: PaperMetadata; extractedText: string }[]) => {
+        mutationFn: async (papers: Partial<Paper>[]) => {
             const userId = auth.currentUser?.uid || "demo-user";
 
             // 1. Create Analysis Document
@@ -37,6 +37,9 @@ export function useUploadPapers() {
                         userId,
                         metadata: p.metadata,
                         extractedText: p.extractedText,
+                        tables: p.tables || [],
+                        figures: p.figures || [],
+                        key_findings: p.key_findings || [],
                         upload_timestamp: serverTimestamp()
                     })
                 )

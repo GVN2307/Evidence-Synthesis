@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 import Providers from "@/components/providers";
+import { AuthInitializer } from "@/components/AuthInitializer";
 
 export default function RootLayout({
     children,
@@ -19,6 +20,7 @@ export default function RootLayout({
     return (
         <html lang="en" className="dark">
             <body className={`${inter.className} bg-slate-950 text-slate-50 antialiased`}>
+                <AuthInitializer />
                 <Providers>{children}</Providers>
             </body>
         </html>

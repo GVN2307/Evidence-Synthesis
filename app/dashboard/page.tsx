@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAnalysisStatus } from "@/hooks/useAnalysis";
 import { useAnalysisStore } from "@/store/useAnalysisStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,8 +15,11 @@ import { RawSynthesis } from "@/components/RawSynthesis";
 import { WhatIfAnalysis } from "@/components/WhatIfAnalysis";
 import { Button } from "@/components/ui/button";
 
-export default function AnalysisDashboard() {
-    const { analysisId } = useParams() as { analysisId: string };
+import { Suspense } from "react";
+
+function DashboardContent() {
+    const searchParams = useSearchParams();
+    const analysisId = searchParams.get("id") || "";
     const { data: analysis, isLoading, error } = useAnalysisStatus(analysisId);
     const { setUIState } = useAnalysisStore();
 
@@ -208,4 +211,15 @@ export default function AnalysisDashboard() {
     );
 }
 
-
+export default function AnalysisDashboard() {
+    return (
+        <Suspense fallback={
+            <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                <p className="text-slate-400">Loading analysis...</p>
+            </div>
+        }>
+            <DashboardContent />
+        </Suspense>
+    );
+}

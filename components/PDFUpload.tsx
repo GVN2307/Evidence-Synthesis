@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { extractTextFromPDF, extractMetadata } from "@/lib/pdf-utils";
 import { useUploadPapers } from "@/hooks/useAnalysis";
-import { PaperMetadata } from "@/types";
+import { Paper } from "@/types";
+import { useRouter } from "next/navigation";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 export function PDFUpload() {
     const {
@@ -19,14 +21,20 @@ export function PDFUpload() {
         addFile,
         removeFile,
         extractionStatus,
+        extractionErrors,
         setExtractionStatus,
+        setExtractionError,
+        setManualText,
+        manualTexts,
         setUIState,
         reset
     } = useAnalysisStore();
+    const router = useRouter();
 
-    const [localExtractionProgress, setLocalExtractionProgress] = useState<Record<string, number>>({});
     const [isInternalProcessing, setIsInternalProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showManualPaste, setShowManualPaste] = useState<string | null>(null);
+    const [tempManualText, setTempManualText] = useState("");
 
     const uploadMutation = useUploadPapers();
 
@@ -51,44 +59,82 @@ export function PDFUpload() {
         setError(null);
 
         try {
-            const extractedData: { extractedText: string; metadata: PaperMetadata }[] = [];
+            const extractedData: Partial<Paper>[] = [];
 
             for (const file of files) {
                 setExtractionStatus(file.name, "loading");
 
                 try {
-                    const text = await extractTextFromPDF(file, (p) => {
-                        setLocalExtractionProgress(prev => ({ ...prev, [file.name]: p }));
+                    // MULTIMODAL GEMINI EXTRACTION
+                    const formData = new FormData();
+                    formData.append("file", file);
+
+                    const response = await fetch("/api/analyze-pdf", {
+                        method: "POST",
+                        body: formData,
                     });
 
-                    const metadata = extractMetadata(file);
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        setExtractionError(file.name, errorData.code || "UNKNOWN_ERROR");
+                        throw new Error(errorData.error || `Failed to process ${file.name}`);
+                    }
+
+                    const data = await response.json();
+                    const extracted = data.extractedData;
+
                     extractedData.push({
-                        extractedText: text,
+                        extractedText: extracted.full_text,
+                        tables: extracted.tables || [],
+                        figures: extracted.figures || [],
+                        key_findings: extracted.key_findings || [],
                         metadata: {
                             paper_id: Math.random().toString(36).substring(7),
-                            title: metadata.title,
-                            authors: metadata.authors,
-                            year: metadata.year,
-                            text_length: text.length
+                            title: extracted.metadata.title || file.name.replace(".pdf", ""),
+                            authors: extracted.metadata.authors || ["Unknown"],
+                            year: extracted.metadata.year || new Date().getFullYear(),
+                            keywords: extracted.metadata.keywords || [],
+                            text_length: extracted.full_text.length
                         }
                     });
 
                     setExtractionStatus(file.name, "success");
-                } catch {
-                    setExtractionStatus(file.name, "error");
-                    throw new Error(`Failed to extract text from ${file.name}`);
+                } catch (err) {
+                    // Check if we have manual text already
+                    if (manualTexts[file.name]) {
+                        extractedData.push({
+                            extractedText: manualTexts[file.name],
+                            metadata: {
+                                paper_id: Math.random().toString(36).substring(7),
+                                title: file.name.replace(".pdf", ""),
+                                authors: ["Unknown"],
+                                year: new Date().getFullYear(),
+                                text_length: manualTexts[file.name].length
+                            }
+                        });
+                        setExtractionStatus(file.name, "success");
+                    } else {
+                        console.error(`Extraction failed for ${file.name}:`, err);
+                        setExtractionStatus(file.name, "error");
+                        const errorMessage = err instanceof Error ? err.message : "Extraction failed";
+                        setError(`Failed to process ${file.name}: ${errorMessage}`);
+                        return; // Stop processing batch
+                    }
                 }
             }
 
             // Status transition: extracting -> uploading (handled by mutation)
-            await uploadMutation.mutateAsync(extractedData);
+            const analysisId = await uploadMutation.mutateAsync(extractedData);
+
+            // On success, navigate to dashboard
+            router.push(`/dashboard?id=${analysisId}`);
 
             // On success, the hook sets status to 'ready' in Firestore and we redirect or show results
             setUIState({ isAnalyzing: false });
         } catch (err) {
             console.error(err);
             const errorMessage = err instanceof Error ? err.message : "Failed to process PDFs.";
-            setError(`${errorMessage} Please ensure they are valid and not password protected.`);
+            setError(`${errorMessage}`);
         } finally {
             setIsInternalProcessing(false);
         }
@@ -159,16 +205,33 @@ export function PDFUpload() {
                                 <div className="mt-3 space-y-1">
                                     <div className="flex justify-between text-[10px] text-slate-400">
                                         <span>Extracting Text...</span>
-                                        <span>{localExtractionProgress[file.name] || 0}%</span>
                                     </div>
-                                    <Progress value={localExtractionProgress[file.name] || 0} className="h-1" />
+                                    <Progress value={45} className="h-1 animate-pulse" />
                                 </div>
                             )}
 
                             {extractionStatus[file.name] === "error" && (
-                                <p className="mt-2 text-[10px] text-contradiction flex items-center gap-1">
-                                    <AlertCircle className="w-3 h-3" /> Extraction failed
-                                </p>
+                                <div className="mt-2 space-y-2">
+                                    <p className="text-[10px] text-contradiction flex items-center gap-1">
+                                        <AlertCircle className="w-3 h-3" /> Extraction failed: {extractionErrors[file.name]}
+                                    </p>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-[10px] border-contradiction/50 text-contradiction hover:bg-contradiction/10"
+                                        onClick={() => {
+                                            setTempManualText(manualTexts[file.name] || "");
+                                            setShowManualPaste(file.name);
+                                        }}
+                                    >
+                                        Paste Text Manually
+                                    </Button>
+                                    {manualTexts[file.name] && (
+                                        <p className="text-[10px] text-agreement flex items-center gap-1">
+                                            ✓ Manual text provided ({manualTexts[file.name].length} chars)
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </Card>
                     ))}
@@ -198,6 +261,42 @@ export function PDFUpload() {
                     </div>
                 </div>
             )}
+            {/* Manual Paste Dialog */}
+            <Dialog open={!!showManualPaste} onOpenChange={() => setShowManualPaste(null)}>
+                <DialogContent className="sm:max-w-[600px] bg-slate-950 border-slate-800">
+                    <DialogHeader>
+                        <DialogTitle>Manual Text Input</DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                            Automated extraction failed for <strong>{showManualPaste}</strong>.
+                            Please copy and paste the text content from the PDF below to continue.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea
+                            placeholder="Paste text here... (Min 50 characters)"
+                            className="min-h-[300px] bg-slate-900 border-slate-700 font-mono text-sm"
+                            value={tempManualText}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTempManualText(e.target.value)}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setShowManualPaste(null)}>Cancel</Button>
+                        <Button
+                            className="bg-agreement text-slate-950 font-bold"
+                            disabled={tempManualText.length < 50}
+                            onClick={() => {
+                                if (showManualPaste) {
+                                    setManualText(showManualPaste, tempManualText);
+                                    setExtractionStatus(showManualPaste, "idle"); // Reset status so they can try start analysis again
+                                    setShowManualPaste(null);
+                                }
+                            }}
+                        >
+                            Save Manual Text
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

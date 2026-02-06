@@ -69,73 +69,76 @@ export async function POST(req: NextRequest) {
       ...doc.data()
     } as Paper));
 
-    // 3. Construct the prompt
+    // 3. Construct the multimodal prompt
     const prompt = `
-SYSTEM: You are an evidence synthesis engine analyzing multiple research papers. Output strict JSON only. No markdown, no explanations outside JSON structure.
+    SYSTEM: You are an extreme-fidelity evidence synthesis engine. 
+    TASK: Analyze these papers using both their textual content and extracted visual data (tables/figures).
+    
+    SPECIAL FOCUS: 
+    - Cross-reference textual claims against data in tables.
+    - Resolve contradictions by looking at differences in sample size (N), p-values, and effect sizes in Tables.
+    - Use figure descriptions to understand trends not fully captured in text.
 
-TASK: Analyze these papers on the same topic. Identify quantitative claims, methodologies, contradictions between studies on SAME outcome measure, and root causes of disagreement.
-
-PAPERS:
-${papers.map((p, i) => `--- PAPER ${i + 1}: ${p.metadata.title} ---
-AUTHORS: ${p.metadata.authors.join(', ')}
-YEAR: ${p.metadata.year}
-TEXT: ${p.extractedText.slice(0, 4000)}
-`).join('\n')}
-
-OUTPUT SCHEMA:
-{
-  "synthesis_id": "${analysisId}",
-  "topic": "exact research question addressed",
-  "papers_analyzed": ${papers.length},
-  "agreed_findings": [
+    PAPERS:
+    ${papers.map((p, i) => `--- PAPER ${i + 1}: ${p.metadata.title} ---
+    AUTHORS: ${p.metadata.authors.join(', ')}
+    YEAR: ${p.metadata.year}
+    TEXT: ${p.extractedText.slice(0, 4000)}
+    TABLES: ${p.tables?.map(t => `[${t.caption}]: ${t.content}`).join('\n') || "None provided"}
+    FIGURES: ${p.figures?.map(f => `[${f.caption}]: ${f.description}`).join('\n') || "None provided"}
+    `).join('\n')}
+    
+    OUTPUT SCHEMA:
     {
-      "claim": "specific quantitative statement",
-      "supporting_papers": ["string (e.g. p1)"],
-      "confidence": 0.0-1.0,
-      "evidence_strength": "strong" | "moderate" | "weak"
-    }
-  ],
-  "contradictions": [
-    {
-      "id": "c1",
-      "outcome_measured": "specific metric (e.g., 'reaction time ms')",
-      "paper_a_claim": {
-        "paper_id": "string",
-        "finding": "exact claim text",
-        "effect_size": "large" | "medium" | "small" | "null",
-        "p_value": "p<0.05 or NS"
+      "synthesis_id": "${analysisId}",
+      "topic": "exact research question addressed",
+      "papers_analyzed": ${papers.length},
+      "agreed_findings": [
+        {
+          "claim": "specific quantitative statement",
+          "supporting_papers": ["string (e.g. p1)"],
+          "confidence": 0.0-1.0,
+          "evidence_strength": "strong" | "moderate" | "weak"
+        }
+      ],
+      "contradictions": [
+        {
+          "id": "c1",
+          "outcome_measured": "specific metric (e.g., 'reaction time ms')",
+          "paper_a_claim": {
+            "paper_id": "string",
+            "finding": "exact claim text backed by table data if available",
+            "effect_size": "large" | "medium" | "small" | "null",
+            "p_value": "p<0.05 or NS"
+          },
+          "paper_b_claim": {
+            "paper_id": "string", 
+            "finding": "exact claim text backed by table data if available",
+            "effect_size": "large" | "medium" | "small" | "null",
+            "p_value": "p<0.05 or NS"
+          },
+          "root_cause_analysis": "methodological explanation (population diff, measurement bias, confounding, conflicting table values)",
+          "resolution": "which evidence is stronger and why (citing specific table/figure data)",
+          "confidence_in_resolution": 0.0-1.0
+        }
+      ],
+      "methodology_comparison": {
+        "study_types": [
+          {"type": "RCT" | "cohort" | "case-control" | "mechanistic" | "review", "count": number, "avg_quality": 0.0-1.0}
+        ],
+        "risk_of_bias": ["funding source", "selective reporting", "small sample", "observational only"]
       },
-      "paper_b_claim": {
-        "paper_id": "string", 
-        "finding": "exact claim text",
-        "effect_size": "large" | "medium" | "small" | "null",
-        "p_value": "p<0.05 or NS"
-      },
-      "root_cause_analysis": "methodological explanation (population diff, measurement bias, confounding)",
-      "resolution": "which evidence is stronger and why",
-      "confidence_in_resolution": 0.0-1.0
+      "evidence_gaps": ["specific research questions unanswered"],
+      "synthesis_confidence": 0.0-1.0,
+      "key_recommendation": "practical takeaway with uncertainty acknowledged",
+      "uncertainty_flags": ["specific limitations"]
     }
-  ],
-  "methodology_comparison": {
-    "study_types": [
-      {"type": "RCT" | "cohort" | "case-control" | "mechanistic" | "review", "count": number, "avg_quality": 0.0-1.0}
-    ],
-    "risk_of_bias": ["funding source", "selective reporting", "small sample", "observational only"]
-  },
-  "evidence_gaps": ["specific research questions unanswered"],
-  "synthesis_confidence": 0.0-1.0,
-  "key_recommendation": "practical takeaway with uncertainty acknowledged",
-  "uncertainty_flags": ["specific limitations"]
-}
-
-RULES:
-- Cite specific sections for quantitative claims
-- Flag p-hacking (multiple comparisons, outcome switching)
-- Compare sample sizes directly
-- Note confounders controlled vs uncontrolled
-- If papers don't contradict, contradictions array is empty
-- Confidence calibration: 0.9=certain, 0.5=guess
-`;
+    
+    RULES:
+    - ALWAYS cite specific Tables or Figures when they provide the foundation for a resolution.
+    - If a paper claims X in text but Table Y shows Z, flag this as an internal contradiction.
+    - Compare sample sizes (N) explicitly across tables.
+    `;
 
     // 4. Call Gemini with Retry Logic
     let lastError: Error = new Error("Unknown analysis error");

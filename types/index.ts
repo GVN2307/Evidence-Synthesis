@@ -7,6 +7,15 @@ export type EvidenceStrength = "strong" | "moderate" | "weak";
 export type AnalysisStatus = "idle" | "uploading" | "extracting" | "ready" | "processing" | "complete" | "error";
 export type ExtractionStatus = "idle" | "loading" | "success" | "error";
 
+export type ExtractionErrorCode =
+    | "NOT_PDF"
+    | "SCANNED_IMAGE"
+    | "PASSWORD_PROTECTED"
+    | "FILE_TOO_LARGE"
+    | "EXTRACTION_TIMEOUT"
+    | "CORRUPTED"
+    | "UNKNOWN_ERROR";
+
 export interface PaperMetadata {
     paper_id: string;
     title: string;
@@ -14,6 +23,7 @@ export interface PaperMetadata {
     year: number | null;
     doi?: string;
     text_length: number;
+    keywords?: string[];
 }
 
 export interface Paper {
@@ -21,6 +31,9 @@ export interface Paper {
     analysisId: string;
     extractedText: string;
     metadata: PaperMetadata;
+    tables?: { caption: string; content: string }[];
+    figures?: { caption: string; description: string }[];
+    key_findings?: string[];
     upload_timestamp?: Timestamp;
 }
 
