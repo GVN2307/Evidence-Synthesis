@@ -1,0 +1,13 @@
+node_modules
+.next
+dist
+.env.local
+.env.*.local
+typescript_errors.txt
+ts_errors.txt
+lint_output.txt
+.firebase
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
